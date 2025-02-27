@@ -3,17 +3,20 @@ using UnityEngine.SceneManagement;
 using UnityEngine;
 using Auto_turret.Code.ServiceLocatorSystem;
 using Auto_turret.Code.Services;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
 
 namespace Auto_turret.Code.GameRoot
 {
     public class GameEntryPoint
     {
         private static GameEntryPoint _instance;
-        private LevelManager _levelManager;
-        private LoadingScreen _loadingScreen;
         private Coroutines _coroutines;
+        private LoadingScreen _loadingScreen;
+        private PauseManager _pauseManager;
+        private LevelManager _levelManager;
 
-        // boot point
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void RunGame()
         {
@@ -25,67 +28,45 @@ namespace Auto_turret.Code.GameRoot
         {
             ServiceLocator.Init();
 
+            var eventSystem = new GameObject("EventSystem").AddComponent<EventSystem>();
+            eventSystem.gameObject.AddComponent<InputSystemUIInputModule>();
+            Object.DontDestroyOnLoad(eventSystem); 
+
             _coroutines = new GameObject("Coroutines").AddComponent<Coroutines>();
             Object.DontDestroyOnLoad(_coroutines);
+            ServiceLocator.Instance.Register(_coroutines);
 
             var loadingScreenPrefab = Resources.Load<LoadingScreen>("LoadingScreen");
             _loadingScreen = Object.Instantiate(loadingScreenPrefab);
             Object.DontDestroyOnLoad(_loadingScreen);
+            ServiceLocator.Instance.Register(_loadingScreen);
+
+            var pauseManagerPrefab = Resources.Load<PauseManager>("PauseManager");
+            _pauseManager = Object.Instantiate(pauseManagerPrefab);
+            Object.DontDestroyOnLoad(_pauseManager);
+            ServiceLocator.Instance.Register(_pauseManager);
 
             var levelManagerPrefab = Resources.Load<LevelManager>("LevelManager");
             _levelManager = Object.Instantiate(levelManagerPrefab);
-            _levelManager.Init();
             Object.DontDestroyOnLoad(_levelManager);
+            ServiceLocator.Instance.Register(_levelManager);
+            _levelManager.Init();
         }
 
         private void SelectStartScene()
         {
-#if UNITY_EDITOR
-            var sceneIndex = SceneManager.GetActiveScene().buildIndex;
+            // TO DO 
+            // it is possible to add other scenes
 
-            if (sceneIndex == Scenes.MAIN_MENU)
-            {
-                _coroutines.StartCoroutine(LoadAndStartMainMenu());
-                return;
-            }
-
-            if (sceneIndex > Scenes.MAIN_MENU)
-            {
-                _coroutines.StartCoroutine(LoadAndStartGameplay(sceneIndex));
-                return;
-            }
-
-            if (sceneIndex != Scenes.BOOT)
-            {
-                return;
-            }
-#endif
-
-            _coroutines.StartCoroutine(LoadAndStartMainMenu());
+            _coroutines.StartCoroutine(LoadGameplay());
         }
 
-        private IEnumerator LoadAndStartMainMenu()
+        private IEnumerator LoadGameplay()
         {
             _loadingScreen.Show();
 
             yield return LoadScene(Scenes.BOOT);
-            yield return LoadScene(Scenes.MAIN_MENU);
-
-            yield return new WaitForSeconds(1f);
-
-            _loadingScreen.Hide();
-        }
-
-        private IEnumerator LoadAndStartGameplay(int buildIndex)
-        {
-            _loadingScreen.Show();
-
-            yield return LoadScene(Scenes.BOOT);
-            yield return LoadScene(buildIndex);
-
-            yield return new WaitForSeconds(1f);
-
-            _loadingScreen.Hide();
+            yield return LoadScene(Scenes.MAIN_SCENE);
         }
 
         private IEnumerator LoadScene(int sceneIndex)

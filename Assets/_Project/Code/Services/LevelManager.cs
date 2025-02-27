@@ -4,84 +4,108 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 namespace Auto_turret.Code.Services
 {
     public class LevelManager : MonoBehaviour, IServiceLocator
     {
+        [SerializeField] private float _loadingTime;
+
         private LoadingScreen _loadingScreen;
         private Coroutines _coroutines;
+        private PauseManager _pauseManager;
+
+        private bool _inRestartingProcess = false;
 
         public void Init()
         {
-            ServiceLocator.Instance.Register(this);
+            _loadingScreen = ServiceLocator.Instance.Get<LoadingScreen>();
+            _coroutines = ServiceLocator.Instance.Get<Coroutines>();
+            _pauseManager = ServiceLocator.Instance.Get<PauseManager>();
 
-            _loadingScreen = FindAnyObjectByType<LoadingScreen>();
-            _coroutines = FindAnyObjectByType<Coroutines>();
+            _pauseManager.Init();
         }
 
-        /// <summary>
-        /// This method checks which scene to load: Main Menu or next level, and loading it
-        /// </summary>
-        public void CheckSceneToLoad()
+        private void OnEnable()
         {
-            int totalSceneIndex = SceneManager.sceneCountInBuildSettings;
-            int currentSceneIndex = SceneManager.GetActiveScene().buildIndex;
+            SceneManager.sceneLoaded += OnSceneLoaded;
+        }
 
-            if (currentSceneIndex < totalSceneIndex)
+        private void OnDisable()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+        }
+
+        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            Debug.Log($"Scene {scene.name} loaded in mode {mode}");
+
+#if UNITY_EDITOR
+            // exclude mode 4 after start game in editor
+            // https://discussions.unity.com/t/solved-problem-with-unitys-scene-management/624943
+            if (mode > LoadSceneMode.Additive)
             {
-                currentSceneIndex += 1;
-                _coroutines.StartCoroutine(LoadAndStartNextScene(currentSceneIndex));
+                Debug.Log("Checked wrong scene mode");
+                return;
             }
-            else
-            {
-                _coroutines.StartCoroutine(LoadAndStartMainMenu());
-            }
+#endif
+
+            if (scene.buildIndex == Scenes.MAIN_SCENE)
+                _coroutines.StartCoroutine(LoadingGameplayCoroutine());
         }
 
-        public void LoadFirstScene()
+        private IEnumerator LoadingGameplayCoroutine()
         {
-            _coroutines.StartCoroutine(LoadAndStartFirstScene());
+            yield return new WaitForSeconds(_loadingTime);
+            StartGameplay();
         }
 
-        private IEnumerator LoadAndStartFirstScene()
+        private void StartGameplay()
+        {
+            _loadingScreen.Hide();
+            _pauseManager.TurnOn();
+            _inRestartingProcess = false;
+
+            Debug.Log("Gameplay started!");
+        }
+
+        private void RestartGameplay()
         {
             _loadingScreen.Show();
-
-            yield return LoadScene(Scenes.BOOT);
-            yield return LoadScene(Scenes.LEVEL_1);
-
-            yield return new WaitForSeconds(1f);
-
-            _loadingScreen.Hide();
+            _pauseManager.TurnOff();
+            _coroutines.StartCoroutine(ReloadGameplayScene());
+            Debug.Log("Gameplay finished!");
         }
 
-        private IEnumerator LoadAndStartNextScene(int sceneIndex)
+        private IEnumerator ReloadGameplayScene()
         {
-            _loadingScreen.Show();
-
+            _inRestartingProcess = true;
             yield return LoadScene(Scenes.BOOT);
-            yield return LoadScene(sceneIndex);
-
-            yield return new WaitForSeconds(1f);
-
-            _loadingScreen.Hide();
-        }
-
-        private IEnumerator LoadAndStartMainMenu()
-        {
-            _loadingScreen.Show();
-
-            yield return LoadScene(Scenes.BOOT);
-            yield return LoadScene(Scenes.MAIN_MENU);
-
-            yield return new WaitForSeconds(1f);
-
-            _loadingScreen.Hide();
+            yield return LoadScene(Scenes.MAIN_SCENE);
         }
 
         private IEnumerator LoadScene(int sceneIndex)
         {
             yield return SceneManager.LoadSceneAsync(sceneIndex);
         }
+
+        public void TryToRestartGameplay()
+        {
+            if (!_inRestartingProcess)
+                RestartGameplay();
+        }
+
+        public void ExitGame()
+        {
+#if UNITY_EDITOR
+            EditorApplication.isPlaying = false;
+#endif
+            Application.Quit();
+        }
+
+
     }
 }

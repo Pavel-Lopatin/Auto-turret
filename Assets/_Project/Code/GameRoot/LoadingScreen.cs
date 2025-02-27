@@ -1,8 +1,9 @@
+using Auto_turret.Code.ServiceLocatorSystem;
 using UnityEngine;
 
 namespace Auto_turret.Code.GameRoot
 {
-    public class LoadingScreen : MonoBehaviour
+    public class LoadingScreen : MonoBehaviour, IServiceLocator
     {
         [SerializeField] private GameObject _loadingScreenCanvas;
 
